@@ -45,7 +45,11 @@ def preprocess_image(image_base64):
 @app.route('/invoke', methods=['POST']) # 新增：适配阿里云函数计算的默认调用路径
 def predict():
     try:
-        data = request.get_json()
+        data = request.get_json(force=True)
+        
+        # 增加一个简单的校验，防止 data 为空
+        if not data:
+            return jsonify({'error': 'Empty request body', 'status': 'fail'}), 400
         
         # 1. 处理文本数据
         # 假设输入包含 keyword 和 title
