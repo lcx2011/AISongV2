@@ -30,6 +30,7 @@ def preprocess_image(image_base64):
     return np.expand_dims(img_np, axis=0)
 
 @app.route('/predict', methods=['POST'])
+@app.route('/invoke', methods=['POST'])  # 新增这一行
 def predict():
     try:
         data = request.get_json()
