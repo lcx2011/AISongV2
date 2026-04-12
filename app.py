@@ -42,6 +42,7 @@ def preprocess_image(image_base64):
     return np.expand_dims(img_np, axis=0).astype(np.float32)
 
 @app.route('/predict', methods=['POST'])
+@app.route('/invoke', methods=['POST']) # 新增：适配阿里云函数计算的默认调用路径
 def predict():
     try:
         data = request.get_json()
