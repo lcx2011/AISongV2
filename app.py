@@ -42,64 +42,48 @@ def preprocess_image(image_base64):
     return np.expand_dims(img_np, axis=0).astype(np.float32)
 
 @app.route('/predict', methods=['POST'])
-@app.route('/invoke', methods=['POST']) # 新增：适配阿里云函数计算的默认调用路径
+@app.route('/invoke', methods=['POST'])
 def predict():
     try:
         data = request.get_json(force=True)
         
-        # 增加一个简单的校验，防止 data 为空
-        if not data:
-            return jsonify({'error': 'Empty request body', 'status': 'fail'}), 400
-        
-        # 1. 处理文本数据
-        # 假设输入包含 keyword 和 title
+        # 1. 处理文本
         text = f"[KW]{data.get('keyword', '')}[TTL]{data.get('title', '')}"
-        tokens = tokenizer(
-            text, 
-            max_length=64, 
-            padding='max_length', 
-            truncation=True, 
-            return_tensors='np'
-        )
+        tokens = tokenizer(text, max_length=64, padding='max_length', truncation=True, return_tensors='np')
         
-        # 2. 处理图像数据
+        # 2. 处理图像
         img_np = preprocess_image(data['image_base64'])
         
-        # 3. 处理数值/结构化数据 (强制转为 float32)
-        # 确保传入的是数字，增加默认值防止报错
-        duration = float(data.get('duration_sec', 0))
-        play_log = float(data.get('play_log', 0))
-        tab_np = np.array([[duration, play_log]], dtype=np.float32)
+        # 3. 处理数值 (强制转换，确保万无一失)
+        # 如果模型报错 Actual: int64, expected: float，极大概率是这里
+        tab_np = np.array([[
+            float(data.get('duration_sec', 0)), 
+            float(data.get('play_log', 0))
+        ]], dtype=np.float32)
 
-        # 4. 构建 ONNX 推理输入
-        # 显式使用 .astype 确保类型与模型定义严格一致
+        # 4. ONNX 推理
+        # 注意：这里我们增加了对 tokens 的类型检查
+        # 如果报错依然存在，尝试把 .astype(np.int64) 改为 .astype(np.float32)
         inputs = {
             'image': img_np.astype(np.float32),
-            'input_ids': tokens['input_ids'].astype(np.int64),
-            'attention_mask': tokens['attention_mask'].astype(np.int64),
+            'input_ids': tokens['input_ids'].astype(np.int64), # 大多数模型是 int64
+            'attention_mask': tokens['attention_mask'].astype(np.int64), # 大多数模型是 int64
             'tabular': tab_np.astype(np.float32)
         }
         
-        # 5. 执行推理
+        # --- 调试代码：查看模型到底想要什么类型 ---
+        # for input_meta in session.get_inputs():
+        #     print(f"Name: {input_meta.name}, Type: {input_meta.type}, Shape: {input_meta.shape}")
+        # ---------------------------------------
+
         outputs = session.run(None, inputs)
-        
-        # 6. 获取结果 (假设模型输出是分类的 Logits)
         pred = int(np.argmax(outputs[0]))
-        # 如果模型输出是概率或单个分数，根据实际情况调整：
-        # score = float(outputs[0][0]) 
         
-        return jsonify({
-            'score': pred, 
-            'status': 'success'
-        })
-        
+        return jsonify({'score': pred, 'status': 'success'})
     except Exception as e:
-        # 打印错误栈到云端日志，方便调试
-        print(f"Error: {str(e)}")
-        return jsonify({
-            'error': str(e), 
-            'status': 'fail'
-        }), 400
+        # 将具体的错误信息打印出来
+        print(f"Exception details: {str(e)}")
+        return jsonify({'error': str(e), 'status': 'fail'}), 400
 
 if __name__ == '__main__':
     # 阿里云函数计算 (FC) 默认监听 9000 端口
