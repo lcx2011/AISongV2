@@ -1,0 +1,5 @@
+flask
+onnxruntime
+transformers
+pillow
+numpy
