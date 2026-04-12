@@ -33,7 +33,10 @@ def preprocess_image(image_base64):
 @app.route('/invoke', methods=['POST'])  # 新增这一行
 def predict():
     try:
-        data = request.get_json()
+        data = request.get_json(force=True, silent=True)
+
+        if data is None:
+            return jsonify({'error': 'No JSON data received', 'status': 'fail'}), 400
         
         # 处理文本
         text = f"[KW]{data['keyword']}[TTL]{data['title']}"
