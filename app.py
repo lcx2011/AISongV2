@@ -72,10 +72,10 @@ def predict():
 
         # 4. 构建输入字典 (严格区分数据类型)
         inputs = {
-            'image': img_np.astype(np.float32),               # 图像必须是 float32
-            'input_ids': tokens['input_ids'].astype(np.int64),       # 文本 ID 必须是 int64
-            'attention_mask': tokens['attention_mask'].astype(np.int64), # 遮罩必须是 int64
-            'tabular': tab_np.astype(np.float32)              # 数值特征必须是 float32
+            'image': img_np.astype(np.float32),               # 必须 float32
+            'input_ids': tokens['input_ids'].astype(np.int64),       # 必须 int64
+            'attention_mask': tokens['attention_mask'].astype(np.int64), # 必须 int64
+            'tabular': tab_np.astype(np.float32)              # 必须 float32
         }
 
         # 执行推理
