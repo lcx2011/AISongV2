@@ -3,3 +3,4 @@ onnxruntime
 transformers
 pillow
 numpy
+yt-dlp
