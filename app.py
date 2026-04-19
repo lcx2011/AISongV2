@@ -24,36 +24,47 @@ print(f"Loading model...")
 session = ort.InferenceSession(MODEL_PATH, providers=['CPUExecutionProvider'])
 tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_PATH)
 
-# --- 🆕 2. 新增：云端解析视频直链接口 ---
 @app.route('/get_video_link', methods=['POST'])
 def get_video_link():
     try:
         data = request.get_json(force=True)
         bvid = data.get('bvid')
-        if not bvid:
-            return jsonify({'status': 'fail', 'msg': '缺少bvid'}), 400
-            
+        
         video_url = f"https://www.bilibili.com/video/{bvid}"
         
-        # yt-dlp 配置：只找包含音轨的单个 mp4 文件 (通常最高 720p)
-        # 这样客户端 Win7 就不需要 ffmpeg 进行合并了
+        # 🆕 增强版配置，专门应对 412 错误
         ydl_opts = {
-            'format': 'best[ext=mp4]/best', 
+            'format': 'best[ext=mp4]/best',
             'quiet': True,
             'no_warnings': True,
+            # 伪装成真实的 Chrome 浏览器
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+            'http_headers': {
+                'Referer': 'https://www.bilibili.com/',
+                'Origin': 'https://www.bilibili.com/',
+                'Accept-Language': 'zh-CN,zh;q=0.9',
+            },
+            # 强制不检查 SSL 证书（有时能解决握手问题）
+            'nocheckcertificate': True,
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            # 尝试获取
             info = ydl.extract_info(video_url, download=False)
-            direct_url = info.get('url')
             return jsonify({
                 'status': 'success',
-                'direct_url': direct_url,
-                'title': info.get('title', 'video')
+                'direct_url': info.get('url'),
+                'title': info.get('title')
             })
     except Exception as e:
-        return jsonify({'status': 'fail', 'msg': str(e)}), 500
-
+        error_msg = str(e)
+        # 如果还是 412，说明 B 站彻底封锁了该机房 IP，需要提示用户提供 Cookie
+        if "412" in error_msg:
+            return jsonify({
+                'status': 'fail', 
+                'msg': "B站拦截了云端请求(412)。建议在服务端配置Cookie或更换函数计算区域。"
+            }), 412
+        return jsonify({'status': 'fail', 'msg': error_msg}), 500
 # --- 3. 原有的 AI 预测接口 ---
 def preprocess_image(image_base64):
     try:
