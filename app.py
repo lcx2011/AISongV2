@@ -66,7 +66,7 @@ def get_video_link():
         video_url = f"https://www.bilibili.com/video/{bvid}"
         
         ydl_opts = {
-            'format': 'bestvideo+bestaudio/best',
+            'format': 'bestvideo[vcodec^=avc1]+bestaudio[ext=m4a]/best[vcodec^=avc1]/best',
             'quiet': True,
             'no_warnings': True,
             'nocheckcertificate': True,
