@@ -51,7 +51,7 @@ req_session.headers.update({
     'Referer': 'https://www.bilibili.com/'
 })
 # --- 修改这里：支持根路径，兼容定时触发器 ---
-@app.route('/', methods=['GET', 'POST'])
+@app.route('/invoke', methods=['GET', 'POST'])
 def keep_warm():
     # 定时触发器进来时，通常是 POST 请求到 /
     # 我们直接返回 OK，就能达到保活容器的目的
