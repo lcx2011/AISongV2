@@ -50,11 +50,12 @@ req_session.headers.update({
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Referer': 'https://www.bilibili.com/'
 })
-# --- 接口 0: 定时保活/健康检查 ---
-@app.route('/health', methods=['GET'])
-def health():
-    # 只要这个接口被访问，整个容器（包括已经加载好的模型）就会被平台保留
-    return "OK", 200
+# --- 修改这里：支持根路径，兼容定时触发器 ---
+@app.route('/', methods=['GET', 'POST'])
+def keep_warm():
+    # 定时触发器进来时，通常是 POST 请求到 /
+    # 我们直接返回 OK，就能达到保活容器的目的
+    return "Keep Warm OK", 200
 
 # --- 接口 1: 高清解析 ---
 @app.route('/get_video_link', methods=['POST'])
