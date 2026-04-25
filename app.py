@@ -50,6 +50,11 @@ req_session.headers.update({
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Referer': 'https://www.bilibili.com/'
 })
+# --- 接口 0: 定时保活/健康检查 ---
+@app.route('/health', methods=['GET'])
+def health():
+    # 只要这个接口被访问，整个容器（包括已经加载好的模型）就会被平台保留
+    return "OK", 200
 
 # --- 接口 1: 高清解析 ---
 @app.route('/get_video_link', methods=['POST'])
