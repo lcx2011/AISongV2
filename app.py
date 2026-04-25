@@ -3,6 +3,7 @@ import io
 import base64
 import numpy as np
 import onnxruntime as ort
+import requests
 from flask import Flask, request, jsonify
 from PIL import Image
 from transformers import AutoTokenizer
@@ -24,7 +25,14 @@ tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_PATH)
 DURATION_MEAN, DURATION_STD = 20013.62078774617, 178296.57879180563
 PLAY_MEAN, PLAY_STD = 11.235865505828247, 3.037800872598104
 
-# --- 接口 1: 高清解析 (按照你要求的 format) ---
+# 全局 Requests Session，用于服务端高速拉取封面
+req_session = requests.Session()
+req_session.headers.update({
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Referer': 'https://www.bilibili.com/'
+})
+
+# --- 接口 1: 高清解析 ---
 @app.route('/get_video_link', methods=['POST'])
 def get_video_link():
     try:
@@ -33,7 +41,6 @@ def get_video_link():
         video_url = f"https://www.bilibili.com/video/{bvid}"
         
         ydl_opts = {
-            # 这里的格式是你要求的：优先AVC(H.264)编码的mp4，兼容性最强
             'format': 'bestvideo[ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[ext=mp4]/best',
             'quiet': True,
             'nocheckcertificate': True,
@@ -63,16 +70,31 @@ def get_video_link():
         return jsonify({'status': 'fail', 'msg': str(e)}), 500
 
 # --- 接口 2: AI 预测 ---
-def preprocess_image(image_base64):
+def fetch_and_preprocess_image(pic_url):
+    """服务端直接从B站拉取图片并转为模型所需格式"""
     try:
-        if not image_base64: return np.zeros((1, 3, 224, 224), dtype=np.float32)
-        img_data = base64.b64decode(image_base64)
-        img = Image.open(io.BytesIO(img_data)).convert('RGB').resize((224, 224))
+        if not pic_url:
+            return np.zeros((1, 3, 224, 224), dtype=np.float32)
+            
+        # 补全 URL 协议
+        if pic_url.startswith('//'):
+            pic_url = "https:" + pic_url
+            
+        # 请求 B 站缩略图 (极大提升服务端拉取速度和内存效率)
+        if "@" not in pic_url:
+            pic_url = f"{pic_url}@320w_200h_1e_1c.jpg"
+            
+        img_resp = req_session.get(pic_url, timeout=5)
+        img_resp.raise_for_status()
+        
+        img = Image.open(io.BytesIO(img_resp.content)).convert('RGB').resize((224, 224))
         img_np = np.array(img).astype(np.float32) / 255.0
         mean, std = np.array([0.485, 0.456, 0.406]), np.array([0.229, 0.224, 0.225])
         img_np = np.transpose((img_np - mean) / std, (2, 0, 1))
         return np.expand_dims(img_np, axis=0).astype(np.float32)
-    except: return np.zeros((1, 3, 224, 224), dtype=np.float32)
+    except Exception as e:
+        print(f"Image fetch error: {e}")
+        return np.zeros((1, 3, 224, 224), dtype=np.float32)
 
 @app.route('/predict', methods=['POST'])
 def predict():
@@ -80,7 +102,10 @@ def predict():
         data = request.get_json(force=True)
         text = f"[KW]{data.get('keyword','')} [TTL]{data.get('title','')}"
         tokens = tokenizer(text, max_length=96, padding='max_length', truncation=True, return_tensors='np')
-        img_np = preprocess_image(data.get('image_base64', ''))
+        
+        # 改动：调用服务端拉取图片函数
+        img_np = fetch_and_preprocess_image(data.get('pic_url', ''))
+        
         d_raw, p_raw = float(data.get('duration_sec', 0)), float(data.get('play', 0))
         tab_np = np.array([[(d_raw - DURATION_MEAN)/DURATION_STD, (np.log1p(p_raw) - PLAY_MEAN)/PLAY_STD]], dtype=np.float32)
         
@@ -91,7 +116,8 @@ def predict():
         pred_idx = int(np.argmax(logits))
         res_map = ["不适合", "一般", "很适合(推荐)"]
         return jsonify({'score': pred_idx, 'label': res_map[pred_idx], 'confidence': float(np.max(probs)), 'status': 'success'})
-    except Exception as e: return jsonify({'error': str(e), 'status': 'fail'}), 400
+    except Exception as e: 
+        return jsonify({'error': str(e), 'status': 'fail'}), 400
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=9000)
