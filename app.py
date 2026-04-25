@@ -16,6 +16,26 @@ MODEL_PATH = os.environ.get("MODEL_PATH", "/mnt/oss/model_v2.onnx")
 TOKENIZER_PATH = "./model_config" 
 # 填入你的 B 站 Cookie
 BILI_COOKIES = os.environ.get("BILI_COOKIES", "")
+# ！！！新增：动态生成标准 Cookie 文件供 yt-dlp 使用 ！！！
+COOKIE_FILE_PATH = "/tmp/bilibili_cookies.txt"
+
+def create_cookie_file(cookie_str, filepath):
+    """将普通的 Cookie 字符串转换为 yt-dlp 支持的 Netscape 格式文件"""
+    if not cookie_str:
+        return
+    with open(filepath, 'w', encoding='utf-8') as f:
+        f.write("# Netscape HTTP Cookie File\n")
+        # yt-dlp 识别 B 站的关键域名
+        domain = ".bilibili.com"
+        for item in cookie_str.split(';'):
+            if '=' not in item:
+                continue
+            key, value = item.strip().split('=', 1)
+            # 格式: 域名, 是否包含子域, 路径, 是否HTTPS, 过期时间(这里写死2030年), 键, 值
+            f.write(f"{domain}\tTRUE\t/\tFALSE\t1893456000\t{key}\t{value}\n")
+
+# 在服务启动时生成 cookie 文件
+create_cookie_file(BILI_COOKIES, COOKIE_FILE_PATH)
 # 初始化 AI 模型
 print("Loading AI Model...")
 session = ort.InferenceSession(MODEL_PATH, providers=['CPUExecutionProvider'])
@@ -44,15 +64,16 @@ def get_video_link():
             'quiet': True,
             'no_warnings': True,
             'nocheckcertificate': True,
-            # 关键修改：强制传递和浏览器一致的请求头给 yt-dlp
+            # 关键修改 1：使用 cookiefile 替代 http_headers 里的 Cookie
+            'cookiefile': COOKIE_FILE_PATH if os.path.exists(COOKIE_FILE_PATH) else None,
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Referer': 'https://www.bilibili.com/',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
                 'Accept-Language': 'zh-CN,zh;q=0.9',
-                'Cookie': BILI_COOKIES  # 确保这个 Cookie 是最新的
+                # 删除了这里的 'Cookie': BILI_COOKIES
             },
-            # 某些地区或云主机 IP 需要模拟 WBI 签名
+            # 如果使用 file cookie 依然报错，尝试注释掉下面这一行
             'extractor_args': {'bilibili': {'web_client': 'web'}},
         }
         
@@ -73,7 +94,6 @@ def get_video_link():
             })
     except Exception as e:
         return jsonify({'status': 'fail', 'msg': str(e)}), 500
-
 # --- 接口 2: AI 预测 ---
 def fetch_and_preprocess_image(pic_url):
     """服务端直接从B站拉取图片并转为模型所需格式"""
