@@ -41,14 +41,20 @@ def get_video_link():
         video_url = f"https://www.bilibili.com/video/{bvid}"
         
         ydl_opts = {
-            'format': 'bestvideo[ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            'format': 'bestvideo+bestaudio/best',
             'quiet': True,
+            'no_warnings': True,
             'nocheckcertificate': True,
+            # 关键修改：强制传递和浏览器一致的请求头给 yt-dlp
             'http_headers': {
-                'Cookie': BILI_COOKIES,
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Referer': 'https://www.bilibili.com/',
-            }
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                'Accept-Language': 'zh-CN,zh;q=0.9',
+                'Cookie': BILI_COOKIES  # 确保这个 Cookie 是最新的
+            },
+            # 某些地区或云主机 IP 需要模拟 WBI 签名
+            'extractor_args': {'bilibili': {'web_client': 'web'}},
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
