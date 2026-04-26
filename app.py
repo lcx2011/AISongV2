@@ -98,7 +98,7 @@ def predict_subtitle():
             img_np = (np.array(img).astype(np.float32) / 255.0 - [0.485, 0.456, 0.406]) / [0.229, 0.224, 0.225]
             img_np = np.expand_dims(np.transpose(img_np, (2, 0, 1)), 0).astype(np.float32)
             
-            logits = sess_sub.run(None, {'image': img_np})[0]
+            logits = sess_sub.run(None, {'input': img_np})[0]
             results.append(int(np.argmax(logits))) # 1表示有字幕
         return jsonify({'status': 'success', 'preds': results})
     except Exception as e: return jsonify({'status': 'fail', 'msg': str(e)}), 400
